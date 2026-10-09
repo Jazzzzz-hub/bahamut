@@ -350,7 +350,7 @@ static char *replies[] =
                                 "signon time",
     /* 318 RPL_ENDOFWHOIS */	":%s 318 %s %s :End of /WHOIS list.",
     /* 319 RPL_WHOISCHANNELS */	":%s 319 %s %s :%s",
-    /* 320 */	                NULL,
+    /* 320 RPL_WHOISPRIVACY */	":%s 320 %s %s :is using WHOIS privacy mode (+p)",
     /* 321 RPL_LISTSTART */	":%s 321 %s Channel :Users Name",
     /* 322 RPL_LIST */		":%s 322 %s %s %d :%s",
     /* 323 RPL_LISTEND */	":%s 323 %s :End of /LIST",

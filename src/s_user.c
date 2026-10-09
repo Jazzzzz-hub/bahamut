@@ -68,7 +68,7 @@ extern int uhm_type;
 extern int uhm_umodeh;
 
 static char buf[BUFSIZE], buf2[BUFSIZE];
-int  user_modes[] =
+long  user_modes[] =
 {
     UMODE_o, 'o',
     UMODE_O, 'O',
@@ -105,6 +105,7 @@ int  user_modes[] =
     UMODE_I, 'I',
 #ifdef SPAMFILTER
     UMODE_P, 'P',
+    UMODE_p, 'p',
 #endif
     0, 0
 };
@@ -2151,45 +2152,72 @@ m_whois(aClient *cptr, aClient *sptr, int parc, char *parv[])
                        user->real_oper_ip);
 #endif
 #endif
-        mlen = strlen(me.name) + strlen(parv[0]) + 9 + strlen(name);
-        for (len = 0, *buf = '\0', lp = user->channel; lp; lp = lp->next)
+                if (!IsUmodep(acptr) || IsAnOper(sptr) || sptr == acptr)
         {
-            chptr = lp->value.chptr;
-            showchan=ShowChannel(sptr,chptr);
-            if (showchan || IsAdmin(sptr))
+            mlen = strlen(me.name) + strlen(parv[0]) + 9 + strlen(name);
+
+            for (len = 0, *buf = '\0', lp = user->channel;
+                 lp;
+                 lp = lp->next)
             {
-                if (len + strlen(chptr->chname) > (size_t) BUFSIZE - 4 - mlen)
+                chptr = lp->value.chptr;
+                showchan = ShowChannel(sptr, chptr);
+
+                if (showchan || IsAdmin(sptr))
                 {
-                    sendto_one(sptr, rpl_str(RPL_WHOISCHANNELS), me.name, parv[0], name, buf);
-                    *buf = '\0';
-                    len = 0;
-                }
-                if(!showchan) /* if we're not really supposed to show the chan
-                               * but do it anyways, mark it as such! */
+                    if (len + strlen(chptr->chname) >
+                        (size_t) BUFSIZE - 4 - mlen)
+                    {
+                        sendto_one(sptr,
+                                   rpl_str(RPL_WHOISCHANNELS),
+                                   me.name,
+                                   parv[0],
+                                   name,
+                                   buf);
+
+                        *buf = '\0';
+                        len = 0;
+                    }
+
+                    if (!showchan)
+                    {
 #ifdef USE_HALFOPS
-                    *(buf + len++) = '~';
+                        *(buf + len++) = '~';
 #else
-                    *(buf + len++) = '%';
+                        *(buf + len++) = '%';
 #endif
-                if (is_chan_op(acptr, chptr))
-                    *(buf + len++) = '@';
+                    }
+
+                    if (is_chan_op(acptr, chptr))
+                        *(buf + len++) = '@';
 #ifdef USE_HALFOPS
-                else if (is_chan_halfop(acptr, chptr))
-                    *(buf + len++) = '%';
+                    else if (is_chan_halfop(acptr, chptr))
+                        *(buf + len++) = '%';
 #endif
-                else if (has_voice(acptr, chptr))
-                    *(buf + len++) = '+';
-                if (len)
-                    *(buf + len) = '\0';
-                strcpy(buf + len, chptr->chname);
-                len += strlen(chptr->chname);
-                strcat(buf + len, " ");
-                len++;
+                    else if (has_voice(acptr, chptr))
+                        *(buf + len++) = '+';
+
+                    if (len)
+                        *(buf + len) = '\0';
+
+                    strcpy(buf + len, chptr->chname);
+                    len += strlen(chptr->chname);
+                    strcat(buf + len, " ");
+                    len++;
+                }
+            }
+
+            if (buf[0] != '\0')
+            {
+                sendto_one(sptr,
+                           rpl_str(RPL_WHOISCHANNELS),
+                           me.name,
+                           parv[0],
+                           name,
+                           buf);
             }
         }
-        if (buf[0] != '\0')
-            sendto_one(sptr, rpl_str(RPL_WHOISCHANNELS), me.name,
-                       parv[0], name, buf);
+
         if(!(IsUmodeI(acptr) && !IsAnOper(sptr)) || (acptr == sptr))
         {
              sendto_one(sptr, rpl_str(RPL_WHOISSERVER), me.name, parv[0], name,
@@ -2213,6 +2241,9 @@ m_whois(aClient *cptr, aClient *sptr, int parc, char *parv[])
                        user->away);
         if(IsUmodeS(acptr))
             sendto_one(sptr, rpl_str(RPL_USINGSSL), me.name, parv[0], name);
+        if (IsUmodep(acptr))
+            sendto_one(sptr, rpl_str(RPL_WHOISPRIVACY),
+                       me.name, parv[0], name);
 
         buf[0] = '\0';
         if (IsAnOper(acptr))
@@ -2265,10 +2296,19 @@ m_whois(aClient *cptr, aClient *sptr, int parc, char *parv[])
         }
 
         /* don't give away that this oper is on this server if they're hidden! */
-        if (acptr->user && MyConnect(acptr) && ((sptr == acptr) ||
-                !IsUmodeI(acptr) || (parc > 2) || IsAnOper(sptr)))
-            sendto_one(sptr, rpl_str(RPL_WHOISIDLE), me.name, parv[0], name,
-                       timeofday - user->last, acptr->firsttime);
+                if ((!IsUmodep(acptr) || IsAnOper(sptr) || sptr == acptr) &&
+            acptr->user &&
+            MyConnect(acptr) &&
+            ((sptr == acptr) ||
+             !IsUmodeI(acptr) ||
+             (parc > 2) ||
+             IsAnOper(sptr)))
+        {
+            sendto_one(sptr, rpl_str(RPL_WHOISIDLE),
+                       me.name, parv[0], name,
+                       timeofday - user->last,
+                       acptr->firsttime);
+        }
 
         continue;
     }
@@ -3037,7 +3077,7 @@ int m_oper(aClient *cptr, aClient *sptr, int parc, char *parv[])
 
     if (StrEq(encr, aoper->passwd))
     {
-        int old = (sptr->umode & ALL_UMODES);
+        long old = (sptr->umode & ALL_UMODES);
 
         if(svsnoop)
         {
@@ -3280,7 +3320,8 @@ m_ison(aClient *cptr, aClient *sptr, int parc, char *parv[])
 int
 m_umode(aClient *cptr, aClient *sptr, int parc, char *parv[])
 {
-    int     flag, *s, setflags, what = MODE_ADD, badflag = NO;
+    long flag, *s, setflags;
+    int what = MODE_ADD, badflag = NO;
     char  **p, *m;
     aClient    *acptr;
 
@@ -3538,9 +3579,11 @@ m_umode(aClient *cptr, aClient *sptr, int parc, char *parv[])
 
 /* send the MODE string for user (user) to connection cptr -avalon */
 void
-send_umode(aClient *cptr, aClient *sptr, long old, long sendmask, char *umode_buf, int bufsize)
+send_umode(aClient *cptr, aClient *sptr, long old, long sendmask,
+           char *umode_buf, int bufsize)
 {
-    int *s, flag, what = MODE_NULL;
+    long *s, flag;
+    int what = MODE_NULL;
     char *m;
     int len;
 

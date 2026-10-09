@@ -32,7 +32,7 @@
 
 #include "pcre.h"
 
-extern int user_modes[];
+extern long user_modes[];
 extern Link *find_channel_link(Link *, aChannel *);
 
 /* max capturing submatches to allow in all fields combined */
